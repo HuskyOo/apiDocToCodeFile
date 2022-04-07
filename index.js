@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+const FS = require('fs');
+const PATH = require('path');
 const got = require('got');
 (async () => {
     initDir()
@@ -11,39 +11,49 @@ const got = require('got');
 
     const { paths, tags = [] } = docData;
 
-    const basePath = path.join(__dirname, '/dist/api');
+    const apiPath = PATH.join(__dirname, '/dist/api');
     tags.forEach(tag => {
-        const fileHead = `// ${tag.name}\nimport request from \"@/utils/request\";\n`;
+        const apiFileHead = `// ${tag.name}\nimport request from \"@/utils/request\";\n`;
         const fileName = tag.description.replace(/\s|Api|Controller/g, '') + '.js';
 
-        const fileContent = Object.keys(paths).reduce((prev, path) => {
-            return Object.keys(paths[path]).reduce((previous, method) => {
+        FS.appendFileSync(PATH.join(apiPath, fileName), apiFileHead, (err) => {
+            if (err) throw err
+        })
+
+        Object.keys(paths).forEach(path => {
+            Object.keys(paths[path]).forEach(method => {
                 const itemInfo = paths[path][method]
                 const [itemTag] = itemInfo.tags
                 if (itemTag === tag.name) {
-                    return previous +templateCode({
+                    const tempCode = templateCode({
                         url: path,
                         method,
                         itemInfo
                     })
+                    FS.appendFileSync(PATH.join(apiPath, fileName), tempCode, (err) => {
+                        if (err) throw err
+                    })
                 }
-                return previous
-            }, prev)
-        }, fileHead)
-
-        fs.writeFileSync(path.join(basePath, fileName), fileContent)
+            })
+        })
         console.log(`${fileName}生成成功`)
     })
 })();
 
 function initDir() {
-    const existDist = fs.existsSync(path.join(__dirname, 'dist'));
+    const existDist = FS.existsSync(PATH.join(__dirname, 'dist'));
     if (!existDist) {
-        fs.mkdirSync(path.join(__dirname, 'dist'))
+        FS.mkdirSync(PATH.join(__dirname, 'dist'))
     }
-    const existApi = fs.existsSync(path.join(__dirname, 'dist/api'));
+    const existApi = FS.existsSync(PATH.join(__dirname, 'dist/api'));
+    if (existApi) {
+        FS.rmdirSync(PATH.join(__dirname, 'dist/api'), {
+            recursive: true
+        })
+        FS.mkdirSync(PATH.join(__dirname, 'dist/api'))
+    }
     if (!existApi) {
-        fs.mkdirSync(path.join(__dirname, 'dist/api'))
+        FS.mkdirSync(PATH.join(__dirname, 'dist/api'))
     }
 }
 
