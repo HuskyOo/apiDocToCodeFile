@@ -12,6 +12,7 @@ const got = require('got');
     const { paths, tags = [] } = docData;
 
     const apiPath = PATH.join(__dirname, '/dist/api');
+    const paramPath = PATH.join(__dirname, '/dist/param');
     tags.forEach(tag => {
         const apiFileHead = `// ${tag.name}\nimport request from \"@/utils/request\";\n`;
         const fileName = tag.description.replace(/\s|Api|Controller/g, '') + '.js';
@@ -25,6 +26,7 @@ const got = require('got');
                 const itemInfo = paths[path][method]
                 const [itemTag] = itemInfo.tags
                 if (itemTag === tag.name) {
+                    // api代码生成
                     const tempCode = templateCode({
                         url: path,
                         method,
@@ -33,6 +35,21 @@ const got = require('got');
                     FS.appendFileSync(PATH.join(apiPath, fileName), tempCode, (err) => {
                         if (err) throw err
                     })
+                    // 字段代码生成
+                    const { parameters = [], responses } = itemInfo
+                    if (method === 'get') {
+                        const paramsObj = parameters.reduce((prev, param) => {
+                            // 忽略掉path的参数， 因为API的生成已处理过了path的参数
+                            if (param.in !== 'path') prev[param.name] = param
+                            return prev
+                        }, {})
+                        const paramCode = `const ${itemInfo.operationId} = ${JSON.stringify(paramsObj, null, "\t")}\n`
+                        if (JSON.stringify(paramsObj) !== "{}") {
+                            FS.appendFileSync(PATH.join(paramPath, fileName), paramCode, (err) => {
+                                if (err) throw err
+                            })
+                        }
+                    }
                 }
             })
         })
@@ -41,20 +58,18 @@ const got = require('got');
 })();
 
 function initDir() {
-    const existDist = FS.existsSync(PATH.join(__dirname, 'dist'));
-    if (!existDist) {
-        FS.mkdirSync(PATH.join(__dirname, 'dist'))
-    }
-    const existApi = FS.existsSync(PATH.join(__dirname, 'dist/api'));
-    if (existApi) {
-        FS.rmdirSync(PATH.join(__dirname, 'dist/api'), {
-            recursive: true
-        })
-        FS.mkdirSync(PATH.join(__dirname, 'dist/api'))
-    }
-    if (!existApi) {
-        FS.mkdirSync(PATH.join(__dirname, 'dist/api'))
-    }
+    FS.rmdirSync(PATH.join(__dirname, 'dist/api'), {
+        recursive: true
+    })
+    FS.mkdirSync(PATH.join(__dirname, 'dist/api'), {
+        recursive: true
+    })
+    FS.rmdirSync(PATH.join(__dirname, 'dist/param'), {
+        recursive: true
+    })
+    FS.mkdirSync(PATH.join(__dirname, 'dist/param'), {
+        recursive: true
+    })
 }
 
 
