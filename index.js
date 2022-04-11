@@ -123,42 +123,47 @@ export function ${functionName}(${params.join(', ')}) {
 function toFieldsCode(itemInfo, definitions) {
     const { operationId, parameters = [], responses } = itemInfo
     let deepCode = ''
-    const paramsObj = parameters.reduce((prev, param) => {
-        if (param.schema && param.schema.$ref) { // 递归处理字段
-            const definitionName = param.schema.$ref.replace(/^#\/definitions\//, '');
-            deepCode += deepGetCode(`${operationIdProcessing(operationId)}_${param.name}`, definitionName, definitions)
-        } else if (param.in !== 'path') {// 忽略掉path的参数， 因为API的生成已处理过了path的参数
-            prev[param.name] = param
-        }
-        return prev
-    }, {})
-    if (responses[200] && responses[200].schema && responses[200].schema.$ref) {
-        const definitionName = responses[200].schema.$ref.replace(/^#\/definitions\//, '');
-        deepCode += deepGetCode(`${operationIdProcessing(operationId)}_response`, definitionName, definitions)
-    }
-    
-    return fieldCode(operationId, paramsObj) + deepCode
-}
+    const operationName = operationIdProcessing(operationId)
 
-function deepGetCode(name, definitionName, definitions, refs = []) {
-    const definitionItem = definitions[definitionName]
-    const { properties } = definitionItem
-    let appendCode = ''
-    const paramsObj = Object.keys(properties).reduce((prev, key) => {
-        const field = properties[key]
-        if (field.items && field.items.$ref) {
-            if (refs.findIndex(ref => ref === field.items.$ref) === -1) {
-                refs.push(field.items.$ref)
-                appendCode += deepGetCode(`${name}_${key}`, field.items.$ref.replace(/^#\/definitions\//, ''), definitions, refs)
-            } else {
-                prev[key] = field
-            }
-        } else {
-            prev[key] = field
-        }
+    // 请求参数
+    const parametersFields = parameters.filter(param => param.in !== 'path').reduce((prev, param) => {
+        prev[param.name] = param
         return prev
     }, {})
-    const code = fieldCode(name, paramsObj) + appendCode
+    deepCode += deepGetCode(parametersFields, operationName, definitions)
+
+    // 返回参数
+    deepCode += deepGetCode(responses[200], operationName + '_res', definitions)   // responses[200]
+    
+    return deepCode
+}
+/**
+ * 递归提取参数
+ * @param {object} fields 
+ * @param {string} name 
+ * @param {object} definitions 
+ * @param {array} refs 
+ * @returns 
+ */
+function deepGetCode(fields, name, definitions, refs = []) {
+    var code = ''
+    const fieldObj = Object.keys(fields).reduce((prev, key) => {
+        const field = fields[key]
+        const $ref = field.$ref || (field.items && field.items.$ref) || (field.schema && field.schema.$ref)
+        if($ref) {
+            if (refs.findIndex(ref => ref === $ref) === -1) {
+                refs.push($ref)
+                const definitionName = $ref.replace(/^#\/definitions\//, '')
+                const definitionItem = definitions[definitionName]
+                const { properties } = definitionItem
+                code += deepGetCode(properties, `${name}_${key}`, definitions, refs)
+            }
+        }
+        prev[key] = field
+        return prev
+    }, {})
+
+    code += fieldCode(name, fieldObj)
     return code
 }
 
@@ -170,18 +175,22 @@ function deepGetCode(name, definitionName, definitions, refs = []) {
  */
 function fieldCode(operationId, paramsObj) {
     // 字段处理
-    const fields = Object.keys(paramsObj).reduce((prev, key) => {
+    const fields = Object.keys(_.omit(paramsObj, ['schema', 'c', 'm', 'd'])).reduce((prev, key) => {
         const field = paramsObj[key]
+        if (typeof field === 'string') return prev
+
         field.label = field.description
         if (field.enum) {
             field.type = 'select'
             field.options = field.enum.map(e => ({[e]:e}))
         }
 
-        prev[key] = _.omit(field, ['description', 'in', 'enum', 'name']) 
+        prev[key] = _.omit(field, ['description', 'in', 'enum', 'name', 'schema', 'items'])
         return prev
     }, {})
-    if (JSON.stringify(paramsObj) !== '{}') {
+    // const fields = paramsObj
+
+    if (JSON.stringify(fields) !== '{}') {
         return `export const ${operationIdProcessing(operationId)} = ${JSON.stringify(fields, null, "\t")}\n`
     }
     return ""
