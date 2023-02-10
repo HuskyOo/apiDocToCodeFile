@@ -6,10 +6,15 @@ const _ = require('lodash');
 (async () => {
     initDir()
     // 模拟数据
-    const docData = require('./assets/swagger1')
+    // const docData = require('./assets/swagger2')
     // 请求swagger的地址， 获取其中的数据 （swagger页面 打开F12 找到类似请求）
-    // const { body } = await got.get('http://192.168.5.107:8080/v2/api-docs');
-    // const docData = JSON.parse(body)
+    // const { body } = await got.get('http://192.168.168.234:8080/v2/api-docs');
+    const { body } = await got.default.get('http://192.168.168.220:9090/v2/api-docs?group=1.x', {
+        headers: {
+            'Authorization': 'Basic dGVzdDp0ZXN0'
+        }
+    });
+    const docData = JSON.parse(body)
 
     const { paths, tags = [], definitions } = docData;
 
@@ -17,7 +22,8 @@ const _ = require('lodash');
     const paramPath = PATH.join(__dirname, '/dist/param');
     tags.forEach(tag => {
         const apiFileHead = `// ${tag.name}\nimport request from \"@/utils/request\";\n`;
-        const fileName = tag.description.replace(/\s|Api|Controller/g, '') + '.js';
+        const description = tag.description || tag.name
+        const fileName = description.replace(/\s|Api|Controller/g, '') + '.js';
 
         FS.appendFileSync(PATH.join(apiPath, fileName), apiFileHead, (err) => {
             if (err) throw err
@@ -149,7 +155,9 @@ function deepGetCode(fields, name, definitions, refs = []) {
     var code = ''
     const fieldObj = Object.keys(fields).reduce((prev, key) => {
         const field = fields[key]
+        console.log(field)
         const $ref = field.$ref || (field.items && field.items.$ref) || (field.schema && field.schema.$ref)
+        console.log($ref)
         if($ref) {
             if (refs.findIndex(ref => ref === $ref) === -1) {
                 refs.push($ref)
